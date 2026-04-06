@@ -50,7 +50,6 @@ static const event_t INT_C = { "interrupt C", 12, handle_interrupt };
 static const event_t INT_D = { "interrupt D", 20, handle_interrupt };
 static const event_t INT_E = { "interrupt E", 3,  handle_interrupt };
 static const event_t INT_F = { "interrupt F", 9,  handle_interrupt };
-static const event_t INT_PC5 = { "interrupt at location 5", 5, handle_interrupt };
 
 static void fire_key_interrupt(ctrl_t *c, int key)
 {
@@ -76,7 +75,7 @@ int main(void)
     puts("\n=== Infinite Memory Loop (0..20) ===");
     puts("Clock: each normal location print occurs every 1 second.");
     puts("Interrupt keys: A B C D E F");
-    puts("When location 5 is reached, the interrupt flag is set.");
+    puts("Interrupt flag is set only when an interrupt key is pressed.");
     puts("While the flag is set, the interrupt location message repeats every 3 seconds.");
     puts("Press Q to clear the interrupt bit and resume normal operation from the saved point.");
     puts("Press X to quit.\n");
@@ -107,12 +106,6 @@ int main(void)
             }
 
             fire_key_interrupt(&c, key);
-        }
-
-        if (!c.interrupt_active && !c.interrupt_resume_guard && c.pc == INT_PC5.location) {
-            ctrl_fire(&c, &INT_PC5);
-            interrupt_banner_printed = false;
-            last_interrupt_tick = 0;
         }
 
         if (c.interrupt_active) {
