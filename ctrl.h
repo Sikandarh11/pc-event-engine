@@ -4,6 +4,15 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+/* 5-bit binary display helpers for memory locations 0..31. */
+#define BIN5_FMT "0b%c%c%c%c%c"
+#define BIN5_ARG(v) \
+    (((v) & 0x10U) ? '1' : '0'), \
+    (((v) & 0x08U) ? '1' : '0'), \
+    (((v) & 0x04U) ? '1' : '0'), \
+    (((v) & 0x02U) ? '1' : '0'), \
+    (((v) & 0x01U) ? '1' : '0')
+
 /* ── Configuration ─────────────────────────────── */
 #define MEM_SIZE        16      /* number of instruction slots  */
 #define MAX_EVENTS      8       /* max registered event types   */

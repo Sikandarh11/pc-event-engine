@@ -10,7 +10,9 @@
 
 static void exec_location(uint8_t pc, const char *label)
 {
-    printf("[MEM]  CLK    -> 1s tick | location %u | %s\n", pc, label);
+    printf("[MEM]  CLK    -> 1s tick | location " BIN5_FMT " | %s\n",
+           BIN5_ARG(pc),
+           label);
 }
 
 static const instr_t program[MEM_LOCATIONS] = {
@@ -44,12 +46,12 @@ static evt_result_t handle_interrupt(const event_t *evt)
     return EVT_RESUME;
 }
 
-static const event_t INT_A = { "interrupt A", 18, handle_interrupt };
-static const event_t INT_B = { "interrupt B", 6,  handle_interrupt };
-static const event_t INT_C = { "interrupt C", 12, handle_interrupt };
-static const event_t INT_D = { "interrupt D", 20, handle_interrupt };
-static const event_t INT_E = { "interrupt E", 3,  handle_interrupt };
-static const event_t INT_F = { "interrupt F", 9,  handle_interrupt };
+static const event_t INT_A = { "interrupt A", 0b10010, handle_interrupt }; /* 18 */
+static const event_t INT_B = { "interrupt B", 0b00110, handle_interrupt }; /* 6  */
+static const event_t INT_C = { "interrupt C", 0b01100, handle_interrupt }; /* 12 */
+static const event_t INT_D = { "interrupt D", 0b10100, handle_interrupt }; /* 20 */
+static const event_t INT_E = { "interrupt E", 0b00011, handle_interrupt }; /* 3  */
+static const event_t INT_F = { "interrupt F", 0b01001, handle_interrupt }; /* 9  */
 
 static void fire_key_interrupt(ctrl_t *c, int key)
 {
@@ -112,17 +114,17 @@ int main(void)
             ULONGLONG now = GetTickCount64();
 
             if (!interrupt_banner_printed) {
-                printf("[INT]  HOLD   -> interrupt active at location %u; %s at location %u; press Q to clear\n",
-                       c.saved_pc,
+                  printf("[INT]  HOLD   -> interrupt active at location " BIN5_FMT "; %s at location " BIN5_FMT "; press Q to clear\n",
+                      BIN5_ARG(c.saved_pc),
                        c.interrupt_name ? c.interrupt_name : "interrupt",
-                       c.interrupt_location);
+                      BIN5_ARG(c.interrupt_location));
                 interrupt_banner_printed = true;
                 last_interrupt_tick = now;
             } else if (now - last_interrupt_tick >= INTERRUPT_REPEAT_MS) {
-                printf("[INT]  HOLD   -> interrupt active at location %u; %s at location %u; press Q to clear\n",
-                       c.saved_pc,
+                  printf("[INT]  HOLD   -> interrupt active at location " BIN5_FMT "; %s at location " BIN5_FMT "; press Q to clear\n",
+                      BIN5_ARG(c.saved_pc),
                        c.interrupt_name ? c.interrupt_name : "interrupt",
-                       c.interrupt_location);
+                      BIN5_ARG(c.interrupt_location));
                 last_interrupt_tick = now;
             }
 

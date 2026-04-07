@@ -16,14 +16,14 @@ void ctrl_init(ctrl_t *c)
 void ctrl_start(ctrl_t *c)
 {
     if (!c->active) return;
-    printf("[CTRL] START  → PC=%02X\n", c->pc);
+    printf("[CTRL] START  -> PC=" BIN5_FMT "\n", BIN5_ARG(c->pc));
     c->running = true;
 }
 
 void ctrl_stop(ctrl_t *c)
 {
     if (!c->active) return;
-    printf("[CTRL] STOP   → PC frozen at %02X\n", c->pc);
+    printf("[CTRL] STOP   -> PC frozen at " BIN5_FMT "\n", BIN5_ARG(c->pc));
     c->running = false;
 }
 
@@ -47,12 +47,12 @@ bool ctrl_step(ctrl_t *c, const instr_t *mem, size_t mem_len)
         c->pc = 0;
 
     if (mem[c->pc].execute == NULL) {
-        printf("[CTRL] SKIP   -> PC=%02X has no executable instruction\n", c->pc);
+        printf("[CTRL] SKIP   -> PC=" BIN5_FMT " has no executable instruction\n", BIN5_ARG(c->pc));
         c->pc = (uint8_t)((c->pc + 1U) % mem_len);
         return true;
     }
 
-    printf("[CTRL] EXEC   -> PC=%02X  [%s]\n", c->pc, mem[c->pc].label);
+    printf("[CTRL] EXEC   -> PC=" BIN5_FMT "  [%s]\n", BIN5_ARG(c->pc), mem[c->pc].label);
     mem[c->pc].execute(c->pc, mem[c->pc].label);
     c->pc = (uint8_t)((c->pc + 1U) % mem_len);
     return true;
@@ -73,7 +73,10 @@ bool ctrl_fire(ctrl_t *c, const event_t *evt)
     c->interrupt_location = evt->location;
     c->interrupt_name = evt->name;
     c->interrupt_active = true;
-    printf("[INT]  FIRE   -> '%s'  (saved PC=%02X, location=%02X)\n", evt->name, c->saved_pc, c->interrupt_location);
+        printf("[INT]  FIRE   -> '%s'  (saved PC=" BIN5_FMT ", location=" BIN5_FMT ")\n",
+            evt->name,
+            BIN5_ARG(c->saved_pc),
+            BIN5_ARG(c->interrupt_location));
 
     evt_result_t result = evt->handler(evt);
 
@@ -101,9 +104,9 @@ bool ctrl_clear_interrupt(ctrl_t *c)
     c->interrupt_active = false;
     c->interrupt_resume_guard = true;
     c->pc = c->saved_pc;
-    printf("[INT]  CLEAR  -> interrupt bit low, PC restored to %02X (%s @ %02X)\n",
-           c->pc,
+        printf("[INT]  CLEAR  -> interrupt bit low, PC restored to " BIN5_FMT " (%s @ " BIN5_FMT ")\n",
+            BIN5_ARG(c->pc),
            c->interrupt_name ? c->interrupt_name : "interrupt",
-           c->interrupt_location);
+            BIN5_ARG(c->interrupt_location));
     return true;
 }
