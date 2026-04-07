@@ -4,7 +4,7 @@
 #include "ctrl.h"
 
 #define MEM_LOCATIONS 11
-#define MEMORY_TICK_MS 1000
+#define MEMORY_TICK_MS 3000
 #define IDLE_POLL_MS 100
 
 typedef enum {
