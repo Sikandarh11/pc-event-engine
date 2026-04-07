@@ -14,8 +14,9 @@ typedef enum {
 } item_state_t;
 
 static item_state_t g_item_state = ITEM_UNKNOWN;
-static unsigned int g_item_id = 1;
-static bool g_interrupt_raised = false;
+static unsigned int g_item_id = 0;
+static unsigned int g_next_item_id = 1;
+static bool g_has_item = false;
 static bool g_waiting_for_answer = false;
 static uint8_t g_question_pc = 0;
 
@@ -30,14 +31,17 @@ static const char *item_state_name(item_state_t s)
 
 static void start_bag_prompt(uint8_t current_pc)
 {
-    if (g_waiting_for_answer) {
-        puts("[INT]  INFO   -> already waiting for answer; press Y or N");
+    if (g_has_item) {
+        puts("[INT]  INFO   -> an item is already on the conveyor; finish it before adding another");
         return;
     }
 
-    g_interrupt_raised = true;
+    g_has_item = true;
+    g_item_id = g_next_item_id++;
+    g_item_state = ITEM_UNKNOWN;
     g_waiting_for_answer = true;
     g_question_pc = current_pc;
+
     printf("[INT]  INPUT  -> item %u detected near conveyor %u. Press Y (bag) or N (not bag). Conveyor keeps moving.\n",
            g_item_id,
            (unsigned int)g_question_pc);
@@ -72,6 +76,13 @@ static void resolve_bag_prompt(int key, uint8_t current_pc)
 
 static void exec_location(uint8_t pc, const char *label)
 {
+    if (!g_has_item) {
+        printf("[MEM]  CLK    -> 1s tick | location " BIN5_FMT " | %s | conveyor empty\n",
+               BIN5_ARG(pc),
+               label);
+        return;
+    }
+
     printf("[MEM]  CLK    -> 1s tick | item %u | location " BIN5_FMT " | %s | state=%s\n",
            g_item_id,
            BIN5_ARG(pc),
@@ -101,10 +112,10 @@ int main(void)
 
     puts("\n=== Conveyor Loop (0..10) ===");
     puts("Clock: each normal location print occurs every 1 second.");
-    puts("Normal execution runs continuously.");
-    puts("Press A when an item appears to raise a bag-check question.");
-    puts("Then press Y or N anytime while it moves; system does not wait for input.");
-    puts("If unresolved, item continues moving and conveyor 10 applies default: NOT BAG.");
+    puts("Conveyor runs continuously; if you do nothing, it stays empty.");
+    puts("Press A to add an item at the current conveyor level and start bag check.");
+    puts("Press Y or N anytime while it moves; system does not wait for input.");
+    puts("If unresolved, that item reaches conveyor 10 and defaults to NOT BAG.");
     puts("Press X to quit.\n");
 
     ULONGLONG last_step_tick = GetTickCount64();
@@ -132,14 +143,9 @@ int main(void)
         if (now - last_step_tick >= MEMORY_TICK_MS) {
             uint8_t current_pc = c.pc;
 
-            if (current_pc == 0 && !g_interrupt_raised) {
-                puts("[INT]  EVENT  -> conveyor 0 interrupt: bag check");
-                puts("[INT]  INFO   -> press A to open bag-check; then Y or N while conveyor keeps moving");
-            }
-
             ctrl_step(&c, program, MEM_LOCATIONS);
 
-            if (current_pc == 10) {
+            if (current_pc == 10 && g_has_item) {
                 if (g_item_state == ITEM_UNKNOWN) {
                     g_item_state = ITEM_NOT_BAG;
                     puts("[INT]  BREAK  -> reached conveyor 10 with no confirmation: THIS IS NOT A BAG");
@@ -148,9 +154,9 @@ int main(void)
                 }
 
                 printf("[CTRL] NEXT   -> item %u complete, loading next item\n", g_item_id);
-                g_item_id++;
+                g_item_id = 0;
+                g_has_item = false;
                 g_item_state = ITEM_UNKNOWN;
-                g_interrupt_raised = false;
                 g_waiting_for_answer = false;
                 g_question_pc = 0;
             }
