@@ -3,70 +3,95 @@
 #include <conio.h>
 #include "ctrl.h"
 
-#define MEM_LOCATIONS 21
+#define MEM_LOCATIONS 11
 #define MEMORY_TICK_MS 1000
-#define INTERRUPT_REPEAT_MS 3000
 #define IDLE_POLL_MS 100
+
+typedef enum {
+    ITEM_UNKNOWN = 0,
+    ITEM_BAG,
+    ITEM_NOT_BAG
+} item_state_t;
+
+static item_state_t g_item_state = ITEM_UNKNOWN;
+static unsigned int g_item_id = 1;
+static bool g_interrupt_raised = false;
+static bool g_waiting_for_answer = false;
+static uint8_t g_question_pc = 0;
+
+static const char *item_state_name(item_state_t s)
+{
+    switch (s) {
+    case ITEM_BAG: return "BAG";
+    case ITEM_NOT_BAG: return "NOT BAG";
+    default: return "UNKNOWN";
+    }
+}
+
+static void start_bag_prompt(uint8_t current_pc)
+{
+    if (g_waiting_for_answer) {
+        puts("[INT]  INFO   -> already waiting for answer; press Y or N");
+        return;
+    }
+
+    g_interrupt_raised = true;
+    g_waiting_for_answer = true;
+    g_question_pc = current_pc;
+    printf("[INT]  INPUT  -> item %u detected near conveyor %u. Press Y (bag) or N (not bag). Conveyor keeps moving.\n",
+           g_item_id,
+           (unsigned int)g_question_pc);
+}
+
+static void resolve_bag_prompt(int key, uint8_t current_pc)
+{
+    if (!g_waiting_for_answer) {
+        puts("[INT]  INFO   -> no pending question; press A first");
+        return;
+    }
+
+    if (key == 'y' || key == 'Y') {
+        g_item_state = ITEM_BAG;
+        printf("[INT]  RESUME -> BAG confirmed for item %u at conveyor %u (question raised at conveyor %u)\n",
+               g_item_id,
+               (unsigned int)current_pc,
+               (unsigned int)g_question_pc);
+    } else if (key == 'n' || key == 'N') {
+        g_item_state = ITEM_NOT_BAG;
+        printf("[INT]  BREAK  -> NOT BAG confirmed for item %u at conveyor %u (question raised at conveyor %u)\n",
+               g_item_id,
+               (unsigned int)current_pc,
+               (unsigned int)g_question_pc);
+    } else {
+        puts("[INT]  INFO   -> use Y or N");
+        return;
+    }
+
+    g_waiting_for_answer = false;
+}
 
 static void exec_location(uint8_t pc, const char *label)
 {
-    printf("[MEM]  CLK    -> 1s tick | location " BIN5_FMT " | %s\n",
+    printf("[MEM]  CLK    -> 1s tick | item %u | location " BIN5_FMT " | %s | state=%s\n",
+           g_item_id,
            BIN5_ARG(pc),
-           label);
+           label,
+           item_state_name(g_item_state));
 }
 
 static const instr_t program[MEM_LOCATIONS] = {
-    { "entity @ location 0",  exec_location },
-    { "entity @ location 1",  exec_location },
-    { "entity @ location 2",  exec_location },
-    { "entity @ location 3",  exec_location },
-    { "entity @ location 4",  exec_location },
-    { "entity @ location 5",  exec_location },
-    { "entity @ location 6",  exec_location },
-    { "entity @ location 7",  exec_location },
-    { "entity @ location 8",  exec_location },
-    { "entity @ location 9",  exec_location },
-    { "entity @ location 10", exec_location },
-    { "entity @ location 11", exec_location },
-    { "entity @ location 12", exec_location },
-    { "entity @ location 13", exec_location },
-    { "entity @ location 14", exec_location },
-    { "entity @ location 15", exec_location },
-    { "entity @ location 16", exec_location },
-    { "entity @ location 17", exec_location },
-    { "entity @ location 18", exec_location },
-    { "entity @ location 19", exec_location },
-    { "entity @ location 20", exec_location }
+    { "entity @ conveyor 0",  exec_location },
+    { "entity @ conveyor 1",  exec_location },
+    { "entity @ conveyor 2",  exec_location },
+    { "entity @ conveyor 3",  exec_location },
+    { "entity @ conveyor 4",  exec_location },
+    { "entity @ conveyor 5",  exec_location },
+    { "entity @ conveyor 6",  exec_location },
+    { "entity @ conveyor 7",  exec_location },
+    { "entity @ conveyor 8",  exec_location },
+    { "entity @ conveyor 9",  exec_location },
+    { "entity @ conveyor 10", exec_location }
 };
-
-static evt_result_t handle_interrupt(const event_t *evt)
-{
-    printf("[INT]  EVENT  -> %s requested\n", evt->name);
-    printf("[INT]  FLAG   -> interrupt bit set\n");
-    return EVT_RESUME;
-}
-
-static const event_t INT_A = { "interrupt A", 0b10010, handle_interrupt }; /* 18 */
-static const event_t INT_B = { "interrupt B", 0b00110, handle_interrupt }; /* 6  */
-static const event_t INT_C = { "interrupt C", 0b01100, handle_interrupt }; /* 12 */
-static const event_t INT_D = { "interrupt D", 0b10100, handle_interrupt }; /* 20 */
-static const event_t INT_E = { "interrupt E", 0b00011, handle_interrupt }; /* 3  */
-static const event_t INT_F = { "interrupt F", 0b01001, handle_interrupt }; /* 9  */
-
-static void fire_key_interrupt(ctrl_t *c, int key)
-{
-    switch (key) {
-    case 'a': case 'A': ctrl_fire(c, &INT_A); break;
-    case 'b': case 'B': ctrl_fire(c, &INT_B); break;
-    case 'c': case 'C': ctrl_fire(c, &INT_C); break;
-    case 'd': case 'D': ctrl_fire(c, &INT_D); break;
-    case 'e': case 'E': ctrl_fire(c, &INT_E); break;
-    case 'f': case 'F': ctrl_fire(c, &INT_F); break;
-    default:
-        printf("[INT]  INFO   -> key '%c' has no mapped interrupt\n", key);
-        break;
-    }
-}
 
 int main(void)
 {
@@ -74,31 +99,26 @@ int main(void)
     ctrl_init(&c);
     ctrl_start(&c);
 
-    puts("\n=== Infinite Memory Loop (0..20) ===");
+    puts("\n=== Conveyor Loop (0..10) ===");
     puts("Clock: each normal location print occurs every 1 second.");
-    puts("Interrupt keys: A B C D E F");
-    puts("Interrupt flag is set only when an interrupt key is pressed.");
-    puts("While the flag is set, the interrupt location message repeats every 3 seconds.");
-    puts("Press Q to clear the interrupt bit and resume normal operation from the saved point.");
+    puts("Normal execution runs continuously.");
+    puts("Press A when an item appears to raise a bag-check question.");
+    puts("Then press Y or N anytime while it moves; system does not wait for input.");
+    puts("If unresolved, item continues moving and conveyor 10 applies default: NOT BAG.");
     puts("Press X to quit.\n");
 
     ULONGLONG last_step_tick = GetTickCount64();
-    ULONGLONG last_interrupt_tick = 0;
-    bool interrupt_banner_printed = false;
 
     while (c.active) {
         if (_kbhit()) {
             int key = _getch();
 
-            if (key == 'q' || key == 'Q') {
-                if (c.interrupt_active) {
-                    ctrl_clear_interrupt(&c);
-                    interrupt_banner_printed = false;
-                    last_interrupt_tick = 0;
-                } else {
-                    puts("[INT]  INFO   -> no interrupt active to clear");
-                }
-                continue;
+            if (key == 'a' || key == 'A') {
+                start_bag_prompt(c.pc);
+            }
+
+            if (key == 'y' || key == 'Y' || key == 'n' || key == 'N') {
+                resolve_bag_prompt(key, c.pc);
             }
 
             if (key == 'x' || key == 'X') {
@@ -106,38 +126,35 @@ int main(void)
                 ctrl_stop(&c);
                 break;
             }
-
-            fire_key_interrupt(&c, key);
-        }
-
-        if (c.interrupt_active) {
-            ULONGLONG now = GetTickCount64();
-
-            if (!interrupt_banner_printed) {
-                  printf("[INT]  HOLD   -> interrupt active at location " BIN5_FMT "; %s at location " BIN5_FMT "; press Q to clear\n",
-                      BIN5_ARG(c.saved_pc),
-                       c.interrupt_name ? c.interrupt_name : "interrupt",
-                      BIN5_ARG(c.interrupt_location));
-                interrupt_banner_printed = true;
-                last_interrupt_tick = now;
-            } else if (now - last_interrupt_tick >= INTERRUPT_REPEAT_MS) {
-                  printf("[INT]  HOLD   -> interrupt active at location " BIN5_FMT "; %s at location " BIN5_FMT "; press Q to clear\n",
-                      BIN5_ARG(c.saved_pc),
-                       c.interrupt_name ? c.interrupt_name : "interrupt",
-                      BIN5_ARG(c.interrupt_location));
-                last_interrupt_tick = now;
-            }
-
-            Sleep(IDLE_POLL_MS);
-            continue;
         }
 
         ULONGLONG now = GetTickCount64();
         if (now - last_step_tick >= MEMORY_TICK_MS) {
-            ctrl_step(&c, program, MEM_LOCATIONS);
-            if (c.interrupt_resume_guard && !c.interrupt_active) {
-                c.interrupt_resume_guard = false;
+            uint8_t current_pc = c.pc;
+
+            if (current_pc == 0 && !g_interrupt_raised) {
+                puts("[INT]  EVENT  -> conveyor 0 interrupt: bag check");
+                puts("[INT]  INFO   -> press A to open bag-check; then Y or N while conveyor keeps moving");
             }
+
+            ctrl_step(&c, program, MEM_LOCATIONS);
+
+            if (current_pc == 10) {
+                if (g_item_state == ITEM_UNKNOWN) {
+                    g_item_state = ITEM_NOT_BAG;
+                    puts("[INT]  BREAK  -> reached conveyor 10 with no confirmation: THIS IS NOT A BAG");
+                } else {
+                    printf("[INT]  INFO   -> final state at conveyor 10: %s\n", item_state_name(g_item_state));
+                }
+
+                printf("[CTRL] NEXT   -> item %u complete, loading next item\n", g_item_id);
+                g_item_id++;
+                g_item_state = ITEM_UNKNOWN;
+                g_interrupt_raised = false;
+                g_waiting_for_answer = false;
+                g_question_pc = 0;
+            }
+
             last_step_tick = now;
         }
 
